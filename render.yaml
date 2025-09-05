@@ -1,6 +1,6 @@
 # =========================================================================
 # Render Blueprint (Infrastructure as Code) for Mobile Price Analyzer
-# VERSION 2 - CORRECTED DATABASE TYPE
+# VERSION 3 - Clean file to resolve parsing issues
 # =========================================================================
 
 services:
@@ -8,20 +8,20 @@ services:
   # زیرساخت: دیتابیس و صف پیام
   # -----------------------------------------------------------------------
 
-  - name: mobile-db
-    type: postgres     # <<< FIX: Changed from "psql" to "postgres"
-    plan: free         # پلن رایگان دیتابیس بعد از 90 روز منقضی می‌شود
+  - type: postgres
+    name: mobile-db
+    plan: free
 
-  - name: message-queue
-    type: redis
+  - type: redis
+    name: message-queue
     plan: free
 
   # -----------------------------------------------------------------------
   # سرویس‌های برنامه: API Gateway, Extractor, Parser
   # -----------------------------------------------------------------------
 
-  - name: api-gateway
-    type: web
+  - type: web
+    name: api-gateway
     env: docker
     region: frankfurt
     plan: free
@@ -40,8 +40,8 @@ services:
 
     startCommand: "gunicorn api_gateway.main:app"
 
-  - name: extractor-worker
-    type: worker
+  - type: worker
+    name: extractor-worker
     env: docker
     region: frankfurt
     plan: free
@@ -62,8 +62,8 @@ services:
 
     startCommand: "python main.py"
 
-  - name: parser-worker
-    type: worker
+  - type: worker
+    name: parser-worker
     env: docker
     region: frankfurt
     plan: free
