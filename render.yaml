@@ -1,62 +1,90 @@
+# =========================================================================
+# Render Blueprint (Infrastructure as Code) for Mobile Price Analyzer
+# =========================================================================
+# این فایل به Render دستور می‌دهد که چگونه پروژه میکروسرویس شما را بسازد.
+# شامل: 1 دیتابیس PostgreSQL, 1 صف پیام Redis, 1 وب‌سرویس, و 2 ورکر پس‌زمینه.
+
 services:
-  # 1. پایگاه داده PostgreSQL مدیریت شده
+  # -----------------------------------------------------------------------
+  # زیرساخت: دیتابیس و صف پیام
+  # -----------------------------------------------------------------------
+
   - name: mobile-db
-    type: psql
-    psqlVersion: 15 # نسخه را می‌توانید تغییر دهید
-    # پلن رایگان برای دیتابیس بعد از ۹۰ روز منقضی می‌شود
+    type: psql         # نوع سرویس: پایگاه داده PostgreSQL
+    psqlVersion: 15    # نسخه PostgreSQL
+    # پلن رایگان دیتابیس بعد از 90 روز منقضی می‌شود. برای کارهای جدی‌تر پلن را ارتقا دهید.
 
-  # 2. صف پیام Redis مدیریت شده
   - name: message-queue
-    type: redis
-    # پلن رایگان Redis حافظه محدودی دارد اما برای شروع کافیست
+    type: redis        # نوع سرویس: Redis برای صف پیام‌ها
+    plan: free         # استفاده از پلن رایگان Redis
+    # پلن رایگان حافظه محدودی دارد (25MB) که برای شروع کافی است.
 
-  # 3. سرویس API Gateway (عمومی و قابل دسترس از اینترنت)
+  # -----------------------------------------------------------------------
+  # سرویس‌های برنامه: API Gateway, Extractor, Parser
+  # -----------------------------------------------------------------------
+
   - name: api-gateway
-    type: web
-    env: docker
-    repo: https://github.com/rezash1977/mobile_analyzer_render.git # آدرس ریپازیتوری گیت‌هاب خود را وارد کنید
-    region: frankfurt # یک منطقه نزدیک انتخاب کنید
-    dockerContext: ./api_gateway
-    dockerfilePath: ./api_gateway/Dockerfile
-    plan: free # پلن رایگان
+    type: web          # نوع سرویس: وب‌سرویس (دارای URL عمومی و پاسخ‌دهنده به HTTP)
+    env: docker        # محیط اجرا: Docker
+    region: frankfurt  # منطقه سرور (می‌توانید به oregon هم تغییر دهید)
+    plan: free         # استفاده از پلن رایگان برای وب‌سرویس
+
+    # آدرس ریپازیتوری گیت‌هاب خود را در خط زیر جایگزین کنید
+    repo: rezash1977/mobile_analyzer_render
+
+    # تنظیمات ساخت Docker
+    dockerContext: ./api_gateway          # به Render بگو به این پوشه برود
+    dockerfilePath: ./api_gateway/Dockerfile # و این Dockerfile را برای ساخت استفاده کند
+
+    # متغیرهای محیطی (Environment Variables)
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: mobile-db
+          name: mobile-db                 # آدرس اتصال به دیتابیس را به صورت خودکار از سرویس mobile-db بخوان
           property: connectionString
-      - key: PYTHONUNBUFFERED
+      - key: PYTHONUNBUFFERED             # برای نمایش صحیح لاگ‌های پایتون در Docker
         value: 1
-    # Gunicorn برای اجرای وب سرور پایتون در محیط پروداکشن
-    startCommand: "gunicorn --bind 0.0.0.0:$PORT api_gateway.main:app"
 
-  # 4. سرویس استخراج کننده (یک ورکر پس‌زمینه)
+    # دستور اجرا در محیط پروداکشن
+    startCommand: "gunicorn api_gateway.main:app"
+
   - name: extractor-worker
-    type: worker
+    type: worker       # نوع سرویس: ورکر پس‌زمینه (بدون URL عمومی، فقط یک اسکریپت را اجرا می‌کند)
     env: docker
-    repo: https://github.com/rezash1977/mobile_analyzer_render.git # آدرس ریپازیتوری گیت‌هاب
     region: frankfurt
+    plan: free
+    repo: rezash1977/mobile_analyzer_render # آدرس ریپازیتوری گیت‌هاب
+
+    # تنظیمات ساخت Docker
     dockerContext: ./extractor
     dockerfilePath: ./extractor/Dockerfile
-    plan: free
+
+    # متغیرهای محیطی
     envVars:
       - key: REDIS_URL
         fromService:
           type: redis
-          name: message-queue
+          name: message-queue             # آدرس اتصال به Redis را از سرویس message-queue بخوان
           property: connectionString
-      - fromGroup: telegram-secrets # گروهی از متغیرهای محرمانه
+      - fromGroup: telegram-secrets       # متغیرهای محرمانه تلگرام را از گروه تعریف شده در پایین بخوان
       - key: PYTHONUNBUFFERED
         value: 1
 
-  # 5. سرویس پردازشگر (ورکر پس‌زمینه دیگر)
+    # دستور اجرای ورکر
+    startCommand: "python main.py"
+
   - name: parser-worker
-    type: worker
+    type: worker       # ورکر پس‌زمینه دوم برای پردازش پیام‌ها
     env: docker
-    repo: https://github.com/rezash1977/mobile_analyzer_render.git # آدرس ریپازیتوری گیت‌هاب
     region: frankfurt
+    plan: free
+    repo: https://github.com/rezash1977/mobile_analyzer_render.git # آدرس ریپازیتوری گیت‌هاب
+
+    # تنظیمات ساخت Docker
     dockerContext: ./parser
     dockerfilePath: ./parser/Dockerfile
-    plan: free
+
+    # متغیرهای محیطی
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -70,13 +98,20 @@ services:
       - key: PYTHONUNBUFFERED
         value: 1
 
-# تعریف متغیرهای محرمانه که نمی‌خواهید در گیت ثبت شوند
+    # دستور اجرای ورکر
+    startCommand: "python main.py"
+
+# =========================================================================
+# گروه متغیرهای محرمانه
+# =========================================================================
+# این متغیرها را در داشبورد Render در بخش Environment وارد کنید تا در گیت ثبت نشوند.
+
 envVarGroups:
   - name: telegram-secrets
     envVars:
       - key: TELEGRAM_API_ID
-        value: "" # این مقادیر را از داشبورد Render وارد کنید
+        value: "" # این مقدار را از داشبورد Render وارد کنید
       - key: TELEGRAM_API_HASH
-        value: ""
+        value: "" # این مقدار را از داشبورد Render وارد کنید
       - key: TELEGRAM_TARGET_CHAT_ID
-        value: ""
+        value: "" # این مقدار را از داشبورد Render وارد کنید
