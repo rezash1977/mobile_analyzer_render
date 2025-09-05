@@ -38,7 +38,7 @@ services:
       - key: PYTHONUNBUFFERED
         value: 1
 
-    startCommand: "gunicorn api_gateway.main:app"
+    startCommand: "gunicorn main:app" # <<< FIX: Corrected Start Command
 
   - type: worker
     name: extractor-worker
