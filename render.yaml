@@ -1,0 +1,82 @@
+services:
+  # 1. پایگاه داده PostgreSQL مدیریت شده
+  - name: mobile-db
+    type: psql
+    psqlVersion: 15 # نسخه را می‌توانید تغییر دهید
+    # پلن رایگان برای دیتابیس بعد از ۹۰ روز منقضی می‌شود
+
+  # 2. صف پیام Redis مدیریت شده
+  - name: message-queue
+    type: redis
+    # پلن رایگان Redis حافظه محدودی دارد اما برای شروع کافیست
+
+  # 3. سرویس API Gateway (عمومی و قابل دسترس از اینترنت)
+  - name: api-gateway
+    type: web
+    env: docker
+    repo: https://github.com/rezash1977/mobile_analyzer_render.git # آدرس ریپازیتوری گیت‌هاب خود را وارد کنید
+    region: frankfurt # یک منطقه نزدیک انتخاب کنید
+    dockerContext: ./api_gateway
+    dockerfilePath: ./api_gateway/Dockerfile
+    plan: free # پلن رایگان
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mobile-db
+          property: connectionString
+      - key: PYTHONUNBUFFERED
+        value: 1
+    # Gunicorn برای اجرای وب سرور پایتون در محیط پروداکشن
+    startCommand: "gunicorn --bind 0.0.0.0:$PORT api_gateway.main:app"
+
+  # 4. سرویس استخراج کننده (یک ورکر پس‌زمینه)
+  - name: extractor-worker
+    type: worker
+    env: docker
+    repo: https://github.com/rezash1977/mobile_analyzer_render.git # آدرس ریپازیتوری گیت‌هاب
+    region: frankfurt
+    dockerContext: ./extractor
+    dockerfilePath: ./extractor/Dockerfile
+    plan: free
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: message-queue
+          property: connectionString
+      - fromGroup: telegram-secrets # گروهی از متغیرهای محرمانه
+      - key: PYTHONUNBUFFERED
+        value: 1
+
+  # 5. سرویس پردازشگر (ورکر پس‌زمینه دیگر)
+  - name: parser-worker
+    type: worker
+    env: docker
+    repo: https://github.com/rezash1977/mobile_analyzer_render.git # آدرس ریپازیتوری گیت‌هاب
+    region: frankfurt
+    dockerContext: ./parser
+    dockerfilePath: ./parser/Dockerfile
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mobile-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: message-queue
+          property: connectionString
+      - key: PYTHONUNBUFFERED
+        value: 1
+
+# تعریف متغیرهای محرمانه که نمی‌خواهید در گیت ثبت شوند
+envVarGroups:
+  - name: telegram-secrets
+    envVars:
+      - key: TELEGRAM_API_ID
+        value: "" # این مقادیر را از داشبورد Render وارد کنید
+      - key: TELEGRAM_API_HASH
+        value: ""
+      - key: TELEGRAM_TARGET_CHAT_ID
+        value: ""
