@@ -10,10 +10,8 @@ services:
   # -----------------------------------------------------------------------
 
   - name: mobile-db
-    type: psql         # نوع سرویس: پایگاه داده PostgreSQL
-    psqlVersion: 15    # نسخه PostgreSQL
-    # پلن رایگان دیتابیس بعد از 90 روز منقضی می‌شود. برای کارهای جدی‌تر پلن را ارتقا دهید.
-
+    type: postgres
+    
   - name: message-queue
     type: redis        # نوع سرویس: Redis برای صف پیام‌ها
     plan: free         # استفاده از پلن رایگان Redis
