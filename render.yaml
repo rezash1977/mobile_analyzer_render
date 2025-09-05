@@ -1,8 +1,7 @@
 # =========================================================================
 # Render Blueprint (Infrastructure as Code) for Mobile Price Analyzer
+# VERSION 2 - CORRECTED DATABASE TYPE
 # =========================================================================
-# این فایل به Render دستور می‌دهد که چگونه پروژه میکروسرویس شما را بسازد.
-# شامل: 1 دیتابیس PostgreSQL, 1 صف پیام Redis, 1 وب‌سرویس, و 2 ورکر پس‌زمینه.
 
 services:
   # -----------------------------------------------------------------------
@@ -10,79 +9,69 @@ services:
   # -----------------------------------------------------------------------
 
   - name: mobile-db
-    type: postgres
-    
+    type: postgres     # <<< FIX: Changed from "psql" to "postgres"
+    plan: free         # پلن رایگان دیتابیس بعد از 90 روز منقضی می‌شود
+
   - name: message-queue
-    type: redis        # نوع سرویس: Redis برای صف پیام‌ها
-    plan: free         # استفاده از پلن رایگان Redis
-    # پلن رایگان حافظه محدودی دارد (25MB) که برای شروع کافی است.
+    type: redis
+    plan: free
 
   # -----------------------------------------------------------------------
   # سرویس‌های برنامه: API Gateway, Extractor, Parser
   # -----------------------------------------------------------------------
 
   - name: api-gateway
-    type: web          # نوع سرویس: وب‌سرویس (دارای URL عمومی و پاسخ‌دهنده به HTTP)
-    env: docker        # محیط اجرا: Docker
-    region: frankfurt  # منطقه سرور (می‌توانید به oregon هم تغییر دهید)
-    plan: free         # استفاده از پلن رایگان برای وب‌سرویس
-
-    # آدرس ریپازیتوری گیت‌هاب خود را در خط زیر جایگزین کنید
-    repo: rezash1977/mobile_analyzer_render
-
-    # تنظیمات ساخت Docker
-    dockerContext: ./api_gateway          # به Render بگو به این پوشه برود
-    dockerfilePath: ./api_gateway/Dockerfile # و این Dockerfile را برای ساخت استفاده کند
-
-    # متغیرهای محیطی (Environment Variables)
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: mobile-db                 # آدرس اتصال به دیتابیس را به صورت خودکار از سرویس mobile-db بخوان
-          property: connectionString
-      - key: PYTHONUNBUFFERED             # برای نمایش صحیح لاگ‌های پایتون در Docker
-        value: 1
-
-    # دستور اجرا در محیط پروداکشن
-    startCommand: "gunicorn api_gateway.main:app"
-
-  - name: extractor-worker
-    type: worker       # نوع سرویس: ورکر پس‌زمینه (بدون URL عمومی، فقط یک اسکریپت را اجرا می‌کند)
+    type: web
     env: docker
     region: frankfurt
     plan: free
-    repo: rezash1977/mobile_analyzer_render # آدرس ریپازیتوری گیت‌هاب
+    repo: https://github.com/rezash1977/mobile_analyzer_render.git
 
-    # تنظیمات ساخت Docker
+    dockerContext: ./api_gateway
+    dockerfilePath: ./api_gateway/Dockerfile
+
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mobile-db
+          property: connectionString
+      - key: PYTHONUNBUFFERED
+        value: 1
+
+    startCommand: "gunicorn api_gateway.main:app"
+
+  - name: extractor-worker
+    type: worker
+    env: docker
+    region: frankfurt
+    plan: free
+    repo: https://github.com/rezash1977/mobile_analyzer_render.git
+
     dockerContext: ./extractor
     dockerfilePath: ./extractor/Dockerfile
 
-    # متغیرهای محیطی
     envVars:
       - key: REDIS_URL
         fromService:
           type: redis
-          name: message-queue             # آدرس اتصال به Redis را از سرویس message-queue بخوان
+          name: message-queue
           property: connectionString
-      - fromGroup: telegram-secrets       # متغیرهای محرمانه تلگرام را از گروه تعریف شده در پایین بخوان
+      - fromGroup: telegram-secrets
       - key: PYTHONUNBUFFERED
         value: 1
 
-    # دستور اجرای ورکر
     startCommand: "python main.py"
 
   - name: parser-worker
-    type: worker       # ورکر پس‌زمینه دوم برای پردازش پیام‌ها
+    type: worker
     env: docker
     region: frankfurt
     plan: free
-    repo: https://github.com/rezash1977/mobile_analyzer_render.git # آدرس ریپازیتوری گیت‌هاب
+    repo: https://github.com/rezash1977/mobile_analyzer_render.git
 
-    # تنظیمات ساخت Docker
     dockerContext: ./parser
     dockerfilePath: ./parser/Dockerfile
 
-    # متغیرهای محیطی
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -96,13 +85,11 @@ services:
       - key: PYTHONUNBUFFERED
         value: 1
 
-    # دستور اجرای ورکر
     startCommand: "python main.py"
 
 # =========================================================================
 # گروه متغیرهای محرمانه
 # =========================================================================
-# این متغیرها را در داشبورد Render در بخش Environment وارد کنید تا در گیت ثبت نشوند.
 
 envVarGroups:
   - name: telegram-secrets
